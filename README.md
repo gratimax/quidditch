@@ -25,7 +25,7 @@ For some reason I thought it was a nice name. I don't have anything better, so t
 Run the compiler like so:
 
 ```bash
-$ node --stack-size=10000 qd.js quidditch-compiler.qd > quidditch-bootstrapped.js
+$ node --stack-size=10000 qd.js quidditch-compiler.lisp > quidditch-bootstrapped.js
 ```
 
 The `--stack-size=10000` parameter is required because the compiler uses rather deep recursion with
