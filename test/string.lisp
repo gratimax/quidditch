@@ -2,16 +2,16 @@
 (def s2 "testing \n out \\ escapes \" \\\ ")
 (def s3 "\\")
 
-(def join (lam (coll s)
+(def join (fn (coll s)
   (coll.join s)))
 
-(def toArray (lam (coll)
+(def toArray (fn (coll)
   (Array.prototype.slice.call coll)))
 
-(def list (lam ()
+(def list (fn ()
   (toArray arguments)))
 
-(def str (lam ()
+(def str (fn ()
   (join (toArray arguments) "")))
 
 (console.log (list 1 2 3 4))
