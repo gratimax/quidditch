@@ -1,0 +1,30 @@
+- goal: self-hosted compiler
+- really hated lisp, but easy
+- chose JS host because of similarity to lisp and simplicity
+- began with normal JS compiler
+- started with tokenizer
+- then value parsing and function and names
+- then def
+- then if/else
+- then infix
+  little nicety, == goes to ===
+- started to transfer over to quidditch
+- numerous errors, discover use of (do statement)
+- (debug) doesn't work, discover why macros
+- stack overflow
+(app x (lam (y)
+  y))
+  several times contributes to stack overflow instead of let
+  let statement became essential
+  could not parse the tokenizer source
+- didn't *need* to use let, def and do did enough!
+   several (app) calls down to one new function scope
+   reduces # of parentheses, always agood thing
+- great feeling to just have tokens working in completely new language
+- not really self hosted since it relies a lot on v8, but getting there
+- inconvenient error handling (barely none at all)
+- worried about converting js objects in original compiler to lisp
+- just use list "struct" functions as a standard
+- some painful debugging later, compiler!
+- cannot test it on actual source - stack overflow
+- stack-size=10000
