@@ -6,23 +6,23 @@
   {})
 
 ; gets the key of an object
-(defn get (obj key)
+(defn obj-get (obj key)
   obj[key])
 
 ; sets the key of an object to the given value
-(defn set (obj key value)
+(defn obj-set! (obj key value)
   (do
     obj[key]=value
     obj))
 
 ; sets a variable
-(defn doSet (obj value)
+(defn vset (obj value)
   (do
     obj=value
     obj))
 
 ; checks if the obj has a key
-(defn hasKey (obj key)
+(defn has-key (obj key)
   (&& obj[key] (obj.hasOwnProperty key)))
 
 ; builds a list from a head and tail
@@ -37,12 +37,20 @@
 (defn len (coll)
   coll.length)
 
+; gets the index of an item in a collection
+(defn index-of (coll i)
+  (coll.indexOf i))
+
+; replaces something in a string
+(defn replace (s mat val)
+  (s.replace mat val))
+
 ; gets the first element of a collection
 (defn head (l)
   l[0])
 
 ; gets the object string for an object
-(defn toObjStr (obj)
+(defn obj-str (obj)
   (Object.prototype.toString.call obj))
 
 ; checks if the string matches the given regex
@@ -74,7 +82,7 @@
   (coll.reduce f))
 
 ; reduce from the right
-(defn reduceR (coll f)
+(defn reduce-r (coll f)
   (coll.reduceRight f))
 
 ; folds the collection via some aggregate function and starting value
@@ -82,12 +90,20 @@
   (coll.reduce f init))
 
 ; folds from the right
-(defn foldR (coll f init)
+(defn fold-r (coll f init)
   (coll.reduceRight f init))
+
+; string upper
+(defn upper (s)
+  (s.toUpperCase))
+
+; string lower
+(defn lower (s)
+  (s.toLowerCase))
 
 ; coerces into an array, welcome to JS
 ; mostly used for arguments
-(defn toArray (coll)
+(defn to-array (coll)
   (Array.prototype.slice.call coll))
 
 ; list application of function arguments
@@ -109,7 +125,7 @@
 
 ; builds a list
 (defn list ()
-  (toArray arguments))
+  (to-array arguments))
 
 ; checks if the list is empty
 (defn empty (l)
@@ -190,65 +206,70 @@
 ; composes two functions together
 (defn comp (a b)
   (fn () 
-    (a (app b (toArray arguments)))))
+    (a (app b (to-array arguments)))))
 
 ; builds a string
 (defn str ()
-  (join (toArray arguments) ""))
+  (join (to-array arguments) ""))
 
 ; checks if an object is an array
-(defn isArray (obj)
-  (== (toObjStr obj) "[object Array]"))
+(defn is-array (obj)
+  (== (obj-str obj) "[object Array]"))
 
 ; checks if an object is a string
-(defn isString (obj)
-  (== (toObjStr obj) "[object String]"))
+(defn is-string (obj)
+  (== (obj-str obj) "[object String]"))
+
+(defn debug (str val)
+  (do
+    (log str)
+    val))
 
 (def parens (list "(" ")"))
 (def whitespace (list " " "\n"))
 
 ; skips as many whitespace chars as possible from the beginning of the string
-(defn skipSpace (stri)
+(defn skip-space (stri)
   (cond
     (empty stri)
       stri
     (has whitespace (head stri))
       ; if we have more whitespace, keep going
-      (skipSpace (tail stri))
+      (skip-space (tail stri))
     else
       ; no more whitespace, return
       stri))
 
 ; the internal recursive token accumulator.
 ; takes the result (a list of tokens) and the string that is being processed
-(defn tokenRec (res stri)
+(defn token-rec (res stri)
   (if (empty stri)
     ; if the string is empty, we're finished
     res
     (let
-      (noSpaces (skipSpace stri))
-      (hd (head noSpaces))
-      (tl (tail noSpaces))
+      (no-spaces (skip-space stri))
+      (hd (head no-spaces))
+      (tl (tail no-spaces))
       (cond
         (has parens hd)
           ; if the token is one of the parentheses, add it automatically
-          (tokenRec (push res hd) tl)
+          (token-rec (push res hd) tl)
 
         (== hd "\"")
           ; if the token is the double quote, then we need to do a string
-          (nextOfString "" false res tl)
+          (next-of-string "" false res tl)
 
         (== hd ";")
           ; if the character is a semicolon, start comment
-          (nextOfComment res tl)
+          (next-of-comment res tl)
 
         else
           ; otherwise, let's try to make a value
-          (nextOfVal hd res tl)))))
+          (next-of-val hd res tl)))))
 
 ; recursive function that consumes a comment
 ; takes the result list of tokens and the string remaining (comment text is ignored)
-(defn nextOfComment (res stri)
+(defn next-of-comment (res stri)
   (if (empty stri)
     ; if the string is empty, return
     res
@@ -257,14 +278,14 @@
       (tl (tail stri))
       (if (== hd '\n')
         ; if the char is a new line (end of comment), return
-        (tokenRec res tl)
+        (token-rec res tl)
         ; otherwise, we keep going
-        (nextOfComment res tl)))))
+        (next-of-comment res tl)))))
 
 ; recursive function that builds up a value, meaning integer or name
 ; takes the result list of tokens, the accumulated string of the value,
 ; and the string remaining
-(defn nextOfVal (acc res stri)
+(defn next-of-val (acc res stri)
   (if (empty stri)
     ; if the string is empty, dump our accumulator and return
     (push res acc)
@@ -275,20 +296,20 @@
         (has whitespace hd)
           ; if the char is whitespace, then we're done with this name.
           ; dump the accumulator and return
-          (tokenRec (push res acc) tl)
+          (token-rec (push res acc) tl)
 
         (has parens hd)
           ; if the char is parentheses, then we're done with the name
           ; dump the accumulator and return
-          (tokenRec (push res acc) stri)
+          (token-rec (push res acc) stri)
 
         else
           ; otherwise, we keep going. append the character and continue
-          (nextOfVal (str acc hd) res tl)))))
+          (next-of-val (str acc hd) res tl)))))
 
 ; recursive function that builds up a string
 ; takes an accumulated string
-(defn nextOfString (acc escape res stri)
+(defn next-of-string (acc escape res stri)
   (if (empty stri)
     (err "next of string expected more characters")
     (let
@@ -297,27 +318,27 @@
       (cond
         (&& (== hd "\\") (! escape))
           ; if the character is a slash and we haven't already set escape, then do so
-          (nextOfString (str acc hd) true res tl)
+          (next-of-string (str acc hd) true res tl)
 
         (&& (== hd "\"") (! escape))
           ; if the character is a double quote without escape, we're done
           ; dump the accumulator, add the quotations, and return
-          (tokenRec (push res (str "\"" acc "\"")) tl)
+          (token-rec (push res (str "\"" acc "\"")) tl)
 
         else
           ; otherwise, keep going and adding to the string
-          (nextOfString (str acc hd) false res tl)))))
+          (next-of-string (str acc hd) false res tl)))))
 
 ; the final tokenize function, that starts with no tokens
 (defn tokenize (stri)
-  (tokenRec nil stri))
+  (token-rec nil stri))
 
 ; builds a parse tree, takes a token list
 (defn parse (tokens)
-  (parseRec nil tokens))
+  (parse-rec nil tokens))
 
 ; the parse tree recursive builder, accumulating result and remaining tokens
-(defn parseRec (tree tokens)
+(defn parse-rec (tree tokens)
   (if (empty tokens)
     ; if there's no more tokens, we're finished
     tree
@@ -331,14 +352,14 @@
         (== hd "(")
           ; if we reach an opening parentheses, start parsing statements
           ; we push an empty list to the tree for the new s-expression
-          (parseStmt 1 (push tree nil) tl)
+          (parse-stmt 1 (push tree nil) tl)
 
         else
           ; otherwise push the token to the tree and keep going
-          (parseRec (push tree (tokenToVal hd)) tl)))))
+          (parse-rec (push tree (token-to-val hd)) tl)))))
 
 ; utility function to append stuff to nested lists from the very bottom
-(defn pushFromBottom (coll item place)
+(defn push-from-bottom (coll item place)
   (if (== place 0)
     ; if we're at the bottom, push the item in
     (push coll item)
@@ -346,12 +367,12 @@
     ; since we're modifying the last item of the list, we pop it off, modify it, and push it back on
     (push 
       (init coll) 
-      ; do pushFromBottom, going down a place
-      (pushFromBottom (last coll) item (- place 1)))))
+      ; do push-from-bottom, going down a place
+      (push-from-bottom (last coll) item (- place 1)))))
 
 ; parses a statement
 ; takes the current place (much like a stack), the accumulated parse tree, and tokens
-(defn parseStmt (place tree tokens)
+(defn parse-stmt (place tree tokens)
   (if (empty tokens)
     (err "error: expected more, unbalanced parentheses")
     (let
@@ -362,29 +383,29 @@
         (== hd ")")
           (if (== place 1)
             ; if we're at the bottom-most statement, then we go back to the root
-            (parseRec tree tl)
+            (parse-rec tree tl)
             ; otherwise we go down a statement
-            (parseStmt (- place 1) tree tl))
+            (parse-stmt (- place 1) tree tl))
 
         ; if we encounter an opening brace,
         (== hd "(")
           ; nest it further
           ; go up one place, and insert a new empty list for the new s-expression
-          (parseStmt (+ place 1) (pushFromBottom tree nil place) tl)
+          (parse-stmt (+ place 1) (push-from-bottom tree nil place) tl)
 
         else
           ; otherwise, keep going
           ; put the latest token into the nested lists
-          (parseStmt place (pushFromBottom tree (tokenToVal hd) place) tl)))))
+          (parse-stmt place (push-from-bottom tree (token-to-val hd) place) tl)))))
 
 ; the list of compiler macros
 (def macros (object))
 
 ; unary negation operator
-(set macros "!" (fn (tree)
+(obj-set! macros "!" (fn (tree)
   (if (== (len tree) 1)
     ; of the form (! <expr>)
-    (str "!(" (compileExpr (head tree)) ")")
+    (str "!(" (compile-expr (head tree)) ")")
     (err "! takes one arg"))))
 
 ; list of standard infix ops
@@ -392,78 +413,78 @@
 
 ; make a macro for all infix operators
 (foreach infix (fn (infix)
-  (set macros infix (fn (tree)
+  (obj-set! macros infix (fn (tree)
     (if (== (len tree) 2)
       ; of the form (<op> <expr> <expr>)
-      (str "(" (compileExpr (head tree)) infix (compileExpr (at tree 1)) ")")
+      (str "(" (compile-expr (head tree)) infix (compile-expr (at tree 1)) ")")
       (err (str infix " takes two args")))))))
 
 ; == gets special treatment since it desugars to === always
-(set macros "==" (fn (tree)
+(obj-set! macros "==" (fn (tree)
   (if (== (len tree) 2)
       ; of the form (<op> <expr> <expr>)
-      (str "(" (compileExpr (head tree)) "===" (compileExpr (at tree 1)) ")")
+      (str "(" (compile-expr (head tree)) "===" (compile-expr (at tree 1)) ")")
       (err "== takes two args"))))
 
 ; same with !=
-(set macros "!=" (fn (tree)
+(obj-set! macros "!=" (fn (tree)
   (if (== (len tree) 2)
       ; of the form (<op> <expr> <expr>)
-      (str "(" (compileExpr (head tree)) "!==" (compileExpr (at tree 1)) ")")
+      (str "(" (compile-expr (head tree)) "!==" (compile-expr (at tree 1)) ")")
       (err "!= takes two args"))))
 
 ; and mod
-(set macros "mod" (fn (tree)
+(obj-set! macros "mod" (fn (tree)
   (if (== (len tree) 2)
       ; of the form (<op> <expr> <expr>)
-      (str "(" (compileExpr (head tree)) "%" (compileExpr (at tree 1)) ")")
+      (str "(" (compile-expr (head tree)) "%" (compile-expr (at tree 1)) ")")
       (err "mod takes two args"))))
 
 ; the def macro
-(set macros "def" (fn (tree)
+(obj-set! macros "def" (fn (tree)
   (if (== (len tree) 2)
     ; of the form (def <name> <expr>)
-    (str "var " (unquote (head tree)) " = " (compileExpr (at tree 1)))
+    (str "var " (sanitize (unquote (head tree))) " = " (compile-expr (at tree 1)))
     (err "def takes two args"))))
 
 ; the if macro
-(set macros "if" (fn (tree)
+(obj-set! macros "if" (fn (tree)
   (if (== (len tree) 3)
     ; of the form (if <expr> <expr> <expr>)
     (str 
-      "(" (compileExpr (head tree)) 
-      " ? " (compileExpr (at tree 1)) 
-      " : " (compileExpr (at tree 2))
+      "(" (compile-expr (head tree)) 
+      " ? " (compile-expr (at tree 1)) 
+      " : " (compile-expr (at tree 2))
       ")")
     (err "if takes three args"))))
 
 ; the do macro
-(set macros "do" (fn (tree)
+(obj-set! macros "do" (fn (tree)
   (if (== (len tree) 0)
     ; of the form (do <expr>+)
     (err "do takes at least one arg")
     (let
-      (mapper (comp (fn (s) (str s ";\n")) compileExpr))
+      (mapper (comp (fn (s) (str s ";\n")) compile-expr))
       (mapped (map (init tree) mapper))
       (joined (join mapped ""))
       (str "(function(){\n"
         joined
-        "return " (compileExpr (last tree))
+        "return " (compile-expr (last tree))
         ";})()")))))
 
 ; the fn macro
-(set macros "fn" (fn (tree)
+(obj-set! macros "fn" (fn (tree)
   (if (== (len tree) 2)
     ; of the form (fn <expr> <expr>)
     (let
       (argsList (map (head tree) unquote))
       (joinedArgs (join argsList ", "))
-      (expr (compileExpr (at tree 1)))
+      (expr (compile-expr (at tree 1)))
       (str "function(" joinedArgs "){ return " expr "; }"))
     (err "fn takes two args"))))
 
 ; the defn macro
-(set macros "defn" (fn (tree)
+(obj-set! macros "defn" (fn (tree)
   (if (== (len tree) 3)
     ; of the form (defn <name> <args> <expr>)
     (let
@@ -471,11 +492,11 @@
       (args (at tree 1))
       (body (at tree 2))
       (anon (list (quote "fn") args body))
-      (compileExpr (list (quote "def") name anon)))
+      (compile-expr (list (quote "def") name anon)))
     (err "defn takes three args"))))
 
 ; the let macro
-(set macros "let" (fn (tree)
+(obj-set! macros "let" (fn (tree)
   (if (== (len tree) 0)
     (err "let takes at least one arg")
     (let
@@ -483,10 +504,10 @@
       (body (map (init tree) (fn (tree)
         (cons (quote "def") tree))))
       (form (push (cons (quote "do") body) expr))
-      (compileExpr form body)))))
+      (compile-expr form body)))))
 
 ; the cond macro
-(set macros "cond" (fn (tree)
+(obj-set! macros "cond" (fn (tree)
   (cond
     (!= (mod (len tree) 2) 0)
       (err "cond must take an even number of params")
@@ -499,18 +520,19 @@
         (lt (last tree))
         (rest (slice tree 0 (- (len tree) 2)))
         (grouped (group2 rest))
-        (form (foldR grouped (fn (acc con)
+        (form (fold-r grouped (fn (acc con)
           (list (quote "if") (head con) (at con 1) acc)) lt))
-        (compileExpr form)))))
+        (compile-expr form)))))
 
 ; attempts to run a macro
 (defn tryMacros (key tree)
-  (if (hasKey macros key)
-    ((get macros key)(tail tree))
+  (if (has-key macros key)
+    ((obj-get macros key)(tail tree))
     tree))
 
 (def INT_REGEX (str 
   "^" ; match start
+  "(-)?" ; optional negative sign
   "[0-9]+" ; a digit
   "(" ; optional positive exponential
   "(?:E|e)" ; use e or E
@@ -529,7 +551,7 @@
 (def bools (list "true" "false"))
 
 ; convert a plaintext token into a parse tree token
-(defn tokenToVal (token)
+(defn token-to-val (token)
   (cond
     (matches token INT_REGEX) token
     (matches token STR_REGEX) token
@@ -545,7 +567,7 @@
   (slice token 1))
 
 ; checks if a token is quoted
-(defn isQuoted (token)
+(defn is-quoted (token)
   (== (head token) "'"))
 
 ; takes a parse tree and compiles it into JS
@@ -554,47 +576,71 @@
     ""
     (str 
       ; compiles the next expression
-      (compileExpr (head tree)) 
+      (compile-expr (head tree)) 
       ";\n"
       (compile (tail tree)))))
 
+; replaces the exclamation point out
+(defn repl-excl (name)
+  (replace name "!" "Excl"))
+
+; sanitizes names, removes dashes and exclamation points
+(defn sanitize (name)
+  (let
+    ; find the next dash
+    (index-dash (index-of name "-"))
+    (cond
+      (== -1 index-dash)
+        ; if it's not there, then we're done
+        (repl-excl name)
+      (matches name INT_REGEX)
+        ; don't santiize int names
+        (repl-excl name)
+      else
+        ; otherwise keep going
+        (str 
+        (slice name 0 index-dash) 
+        (upper (at name (+ index-dash 1))) 
+        (sanitize (slice name (+ index-dash 2))
+      )))))
+
 ; compiles a parse tree
-(defn compileExpr (expr)
+(defn compile-expr (expr)
   (cond 
     ; we have either an s-expression or a macro to expand
-    (isArray expr)
+    (is-array expr)
       (let
         (hd (head expr))
         (tl (tail expr))
-        (if (isString hd)
+        (if (is-string hd)
           ; our head is a string, meaning it's either a macro
           ; or easily compilable s-expression
           (let
             (unquoted (unquote hd))
-            (if (hasKey macros unquoted)
+            (if (has-key macros unquoted)
               ; we have found a macro to expand
-              ((get macros unquoted) tl)
+              ((obj-get macros unquoted) tl)
               ; no macro, just plain s-expression
               (let
-                (mapped (map tl compileExpr))
+                (mapped (map tl compile-expr))
                 (joined (join mapped ", "))
-                (str unquoted "(" joined ")"))))
+                (str (sanitize unquoted) "(" joined ")"))))
           ; otherwise, we need to go the long way and compile the head
           ; for the s-expression
           (let
-            (callee (compileExpr hd))
-            (mapped (map tl compileExpr))
+            (callee (compile-expr hd))
+            (mapped (map tl compile-expr))
             (joined (join mapped ", "))
             (str "(" callee ")(" joined ")"))))
 
     ; we have a string
-    (isQuoted expr)
+    (is-quoted expr)
       ; perhaps some more sophisticated deref in the future
       ; for now, a rather simple unquote
       (if (== expr (quote "nil"))
         ; nil is a special value
         "[]"
-        (unquote expr))
+        (unquote (sanitize expr)))
 
     ; no other special forms, so we just return the expr
     else expr))
@@ -605,7 +651,7 @@
     (def fs (require "fs"))
     (def util (require "util"))
 
-    (def file (fs.readFileSync (at args 2) "utf-8"))
+    (def file (fs.read-file-sync (at args 2) "utf-8"))
 
     (def tokens (tokenize file))
     (def parsed (parse tokens))

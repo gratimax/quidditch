@@ -40,3 +40,5 @@
     (f z))
   also forgot !=, >, <, a whole bunch of operators
 - stack overflow only for tokens! \0/ maybe TCO?
+- when doing sanitization, accidentally turned -1 to 1!
+  fix: (- 0 1)

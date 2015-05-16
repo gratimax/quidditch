@@ -1,6 +1,10 @@
-(def x (fn (a b) a))
+(def my-awesome-test (fn (a b) a))
 
-(def y (if true 3 4))
+(def y (my-awesome-fn))
+
+(def z (my-awesome-fn! 2))
+
+(def q (+ my-awesome-test my-awesome-fn))
 
 (def z (do
   3
