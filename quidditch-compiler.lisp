@@ -15,6 +15,12 @@
     obj[key]=value
     obj))
 
+; sets a variable
+(defn doSet (obj value)
+  (do
+    obj=value
+    obj))
+
 ; checks if the obj has a key
 (defn hasKey (obj key)
   (&& obj[key] (obj.hasOwnProperty key)))
@@ -411,7 +417,7 @@
   (if (== (len tree) 2)
       ; of the form (<op> <expr> <expr>)
       (str "(" (compileExpr (head tree)) "%" (compileExpr (at tree 1)) ")")
-      (err "!= takes two args"))))
+      (err "mod takes two args"))))
 
 ; the def macro
 (set macros "def" (fn (tree)
@@ -481,17 +487,21 @@
 
 ; the cond macro
 (set macros "cond" (fn (tree)
-  ; TODO when I get the >= operator in here, use that
-  ; also mod
-  (if (== (len tree) 0)
-    (err "cond takes at least two args")
-    (let
-      (lt (last tree))
-      (rest (slice tree 0 (- (len tree) 2)))
-      (grouped (group2 rest))
-      (form (foldR grouped (fn (acc con)
-        (list (quote "if") (head con) (at con 1) acc)) lt))
-      (compileExpr form)))))
+  (cond
+    (!= (mod (len tree) 2) 0)
+      (err "cond must take an even number of params")
+
+    (<= (len tree) 2)
+      (err "cond takes at least two args")
+
+    else
+      (let
+        (lt (last tree))
+        (rest (slice tree 0 (- (len tree) 2)))
+        (grouped (group2 rest))
+        (form (foldR grouped (fn (acc con)
+          (list (quote "if") (head con) (at con 1) acc)) lt))
+        (compileExpr form)))))
 
 ; attempts to run a macro
 (defn tryMacros (key tree)
