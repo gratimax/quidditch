@@ -39,3 +39,4 @@
     (def f (my-call x))
     (f z))
   also forgot !=, >, <, a whole bunch of operators
+- stack overflow only for tokens! \0/ maybe TCO?

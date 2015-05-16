@@ -29,7 +29,7 @@ $ node --stack-size=10000 qd.js quidditch-compiler.lisp > quidditch-bootstrapped
 ```
 
 The `--stack-size=10000` parameter is required because the compiler uses rather deep recursion with
-no tail call optimization.
+no tail call optimization for tokenization.
 
 #### Next steps/ideas
 

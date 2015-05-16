@@ -601,15 +601,15 @@
 
 ; the main function. Takes a list of string args
 (defn main (args)
-  (let 
-    (fs (require "fs"))
-    (util (require "util"))
+  (do
+    (def fs (require "fs"))
+    (def util (require "util"))
 
-    (file (fs.readFileSync (at args 2) "utf-8"))
+    (def file (fs.readFileSync (at args 2) "utf-8"))
 
-    (tokens (tokenize file))
-    (parsed (parse tokens))
-    (compiled (compile parsed))
+    (def tokens (tokenize file))
+    (def parsed (parse tokens))
+    (def compiled (compile parsed))
 
     ; (log (util.inspect parsed {depth:null}))
 
