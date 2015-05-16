@@ -46,13 +46,6 @@ var isString = function(obj){ return (toObjStr(obj)==="[object String]"); };
 var parens = list("(", ")");
 var whitespace = list(" ", "\n");
 var skipSpace = function(stri){ return (empty(stri) ? stri : (has(whitespace, head(stri)) ? skipSpace(tail(stri)) : stri)); };
-var INT_REGEX = str("^", "[0-9]+", "(", "(?:E|e)", "[0-9]+)?", "$");
-var STR_REGEX = str("^", "\"", ".*", "\"", "$");
-var bools = list("true", "false");
-var tokenToVal = function(token){ return (matches(token, INT_REGEX) ? token : (matches(token, STR_REGEX) ? token : (has(bools, token) ? token : quote(token)))); };
-var quote = function(token){ return str("'", token); };
-var unquote = function(token){ return slice(token, 1); };
-var isQuoted = function(token){ return (head(token)==="'"); };
 var tokenRec = function(res, stri){ return (empty(stri) ? res : (function(){
 var noSpaces = skipSpace(stri);
 var hd = head(noSpaces);
@@ -117,25 +110,28 @@ var rest = slice(tree, 0, (len(tree)-2));
 var grouped = group2(rest);
 var form = foldR(grouped, function(acc, con){ return list(quote("if"), head(con), at(con, 1), acc); }, lt);
 return compileExpr(form);})()); });
-var tryMacros = function(key, tree){ return (hasKey(macros, key) ? (function(){
-var mac = get(macros, key);
-return mac(tail(tree));})() : tree); };
+var tryMacros = function(key, tree){ return (hasKey(macros, key) ? (get(macros, key))(tail(tree)) : tree); };
+var INT_REGEX = str("^", "[0-9]+", "(", "(?:E|e)", "[0-9]+)?", "$");
+var STR_REGEX = str("^", "\"", ".*", "\"", "$");
+var bools = list("true", "false");
+var tokenToVal = function(token){ return (matches(token, INT_REGEX) ? token : (matches(token, STR_REGEX) ? token : (has(bools, token) ? token : quote(token)))); };
+var quote = function(token){ return str("'", token); };
+var unquote = function(token){ return slice(token, 1); };
+var isQuoted = function(token){ return (head(token)==="'"); };
 var compile = function(tree){ return (empty(tree) ? "" : str(compileExpr(head(tree)), ";\n", compile(tail(tree)))); };
 var compileExpr = function(expr){ return (isArray(expr) ? (function(){
 var hd = head(expr);
 var tl = tail(expr);
 return (isString(hd) ? (function(){
 var unquoted = unquote(hd);
-return (hasKey(macros, unquoted) ? (function(){
-var mac = get(macros, unquoted);
-return mac(tl);})() : (function(){
+return (hasKey(macros, unquoted) ? (get(macros, unquoted))(tl) : (function(){
 var mapped = map(tl, compileExpr);
 var joined = join(mapped, ", ");
 return str(unquoted, "(", joined, ")");})());})() : (function(){
 var callee = compileExpr(hd);
 var mapped = map(tl, compileExpr);
 var joined = join(mapped, ", ");
-return str("(", callee, ")(", mapped, ")");})());})() : (isQuoted(expr) ? ((expr===quote("nil")) ? "[]" : unquote(expr)) : expr)); };
+return str("(", callee, ")(", joined, ")");})());})() : (isQuoted(expr) ? ((expr===quote("nil")) ? "[]" : unquote(expr)) : expr)); };
 var main = function(args){ return (function(){
 var fs = require("fs");
 var util = require("util");
