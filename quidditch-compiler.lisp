@@ -589,20 +589,14 @@
   (let
     ; find the next dash
     (index-dash (index-of name "-"))
-    (cond
-      (== -1 index-dash)
-        ; if it's not there, then we're done
-        (repl-excl name)
-      (matches name INT_REGEX)
-        ; don't santiize int names
-        (repl-excl name)
-      else
-        ; otherwise keep going
-        (str 
+    (if (== -1 index-dash)
+      ; if it's not there, then we're done
+      (repl-excl name)
+      ; otherwise keep going
+      (str 
         (slice name 0 index-dash) 
         (upper (at name (+ index-dash 1))) 
-        (sanitize (slice name (+ index-dash 2))
-      )))))
+        (sanitize (slice name (+ index-dash 2)))))))
 
 ; compiles a parse tree
 (defn compile-expr (expr)

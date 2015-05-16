@@ -132,7 +132,7 @@ var compile = function(tree){ return (empty(tree) ? "" : str(compileExpr(head(tr
 var replExcl = function(name){ return replace(name, "!", "Excl"); };
 var sanitize = function(name){ return (function(){
 var indexDash = indexOf(name, "-");
-return ((-1===indexDash) ? replExcl(name) : (matches(name, INT_REGEX) ? replExcl(name) : str(slice(name, 0, indexDash), upper(at(name, (indexDash+1))), sanitize(slice(name, (indexDash+2))))));})(); };
+return ((-1===indexDash) ? replExcl(name) : str(slice(name, 0, indexDash), upper(at(name, (indexDash+1))), sanitize(slice(name, (indexDash+2)))));})(); };
 var compileExpr = function(expr){ return (isArray(expr) ? (function(){
 var hd = head(expr);
 var tl = tail(expr);

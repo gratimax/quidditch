@@ -2,7 +2,7 @@
 
 (def y (my-awesome-fn))
 
-(def z (my-awesome-fn! 2))
+(def z (my-awesome-fn! 2 -1))
 
 (def q (+ my-awesome-test my-awesome-fn))
 
