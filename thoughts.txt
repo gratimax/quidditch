@@ -1,5 +1,6 @@
 - goal: self-hosted compiler
 - really hated lisp, but easy
+- completely on one
 - chose JS host because of similarity to lisp and simplicity
 - began with normal JS compiler
 - started with tokenizer
@@ -28,3 +29,13 @@
 - some painful debugging later, compiler!
 - cannot test it on actual source - stack overflow
 - stack-size=10000
+- develop with bootstrapped compiler - keep the existing one, use it on tests
+- next step - write a parser to generate a parsed AST 
+- first time developing 100% with bootstrapped compiler - actually quite nice
+- oh dear! compiler malfunction I didn't catch:
+  ((my-call x) z) goes to (z)
+  thankfully:
+  (do
+    (def f (my-call x))
+    (f z))
+  also forgot !=, >, <, a whole bunch of operators
