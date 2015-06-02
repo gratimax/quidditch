@@ -6,6 +6,8 @@
 
 (def q (+ my-awesome-test my-awesome-fn))
 
+(def *my-var* 0)
+
 (def z (do
   3
   4
@@ -26,3 +28,12 @@
   else 3))
 
 (def a ((fn (x) x) 3))
+
+(defn z ()
+  (do
+    (def x 0)
+    (while (< x 10)
+      (console.log x)
+      (set! x (+ x 1)))
+    x))
+

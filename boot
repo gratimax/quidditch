@@ -1,0 +1,1 @@
+node qd.js quidditch-compiler.lisp > qd-boot.js

@@ -42,3 +42,12 @@
 - stack overflow only for tokens! \0/ maybe TCO?
 - when doing sanitization, accidentally turned -1 to 1!
   fix: (- 0 1)
+- trying to do module system
+- instead of tco, implemented while and set! macros and trampolines
+- fear of getting something messed up still strong
+- whoops! forgot about export(), was able to fix
+- feeling the pain of no stdlib when creating examples, have to copy in certain fns
+- to-array arguments does not work in a let or do
+- best thing to be able to do trampoline and it works pretty well
+  (my-fn my-arg-1 my-arg-2) -> (callT my-fn my-arg-1 my-arg-2)
+- took about 10 minutes debugging and 5 minutes to implement in compiler, works flawlessly and simple implementation!

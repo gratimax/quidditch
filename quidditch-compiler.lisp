@@ -2,7 +2,7 @@
 ; because the runtime is pretty horrible, these functions need to exist
 
 ; creates a mutable js object
-(defn object ()
+(defn new-object ()
   {})
 
 ; gets the key of an object
@@ -13,12 +13,6 @@
 (defn obj-set! (obj key value)
   (do
     obj[key]=value
-    obj))
-
-; sets a variable
-(defn vset (obj value)
-  (do
-    obj=value
     obj))
 
 ; checks if the obj has a key
@@ -123,6 +117,28 @@
 ; Quidditch in-language library functions
 ; this is where lisp is somewhat nice :)
 
+; create a mutable variable
+(defn new-var (initial)
+  (do
+    (def *var* (new-object))
+    (obj-set! *var* "value" initial)
+    *var*))
+
+; sets a variable to a value
+(defn var-set! (*var* value)
+  (obj-set! *var* "value" value))
+
+; gets the value of a variable
+(defn var-get (*var*)
+  (obj-get *var* "value"))
+
+; applies and sets a function to the variable
+(defn var-swap! (*var* f)
+  (let
+    (cur-val (var-get *var*))
+    (new-val (f cur-val))
+    (var-set! *var* new-val)))
+
 ; builds a list
 (defn list ()
   (to-array arguments))
@@ -208,6 +224,10 @@
   (fn () 
     (a (app b (to-array arguments)))))
 
+; replace except using split
+(defn resplit (s mat val)
+  (join (split s mat) val))
+
 ; builds a string
 (defn str ()
   (join (to-array arguments) ""))
@@ -224,6 +244,35 @@
   (do
     (log str)
     val))
+
+; TRAMPOLINES
+
+; construct a trampoline call simply
+(defn callCons (f args)
+  (list "trampoline-call" f args))
+
+; convenience constructor to go to the next function
+(defn callT (f)
+  (callCons f (tail (to-array arguments))))
+
+; constructor to return
+(defn valT (v)
+  (list "trampoline-val" v))
+
+; checks if a trampoline is a call
+(defn is-call (trampoline)
+  (== (head trampoline) "trampoline-call"))
+
+; runs a trampoline
+; takes a function to start and the values to start
+(defn runT (f start)
+  (do
+    ; start out with a call
+    (def trampoline (callCons f start))
+    (while (is-call trampoline)
+      (set! trampoline (app (at trampoline 1) (at trampoline 2))))
+    ; return
+    (at trampoline 1)))
 
 (def parens (list "(" ")"))
 (def whitespace (list " " "\n"))
@@ -245,7 +294,7 @@
 (defn token-rec (res stri)
   (if (empty stri)
     ; if the string is empty, we're finished
-    res
+    (valT res)
     (let
       (no-spaces (skip-space stri))
       (hd (head no-spaces))
@@ -253,34 +302,34 @@
       (cond
         (has parens hd)
           ; if the token is one of the parentheses, add it automatically
-          (token-rec (push res hd) tl)
+          (callT token-rec (push res hd) tl)
 
         (== hd "\"")
           ; if the token is the double quote, then we need to do a string
-          (next-of-string "" false res tl)
+          (callT next-of-string "" false res tl)
 
         (== hd ";")
           ; if the character is a semicolon, start comment
-          (next-of-comment res tl)
+          (callT next-of-comment res tl)
 
         else
           ; otherwise, let's try to make a value
-          (next-of-val hd res tl)))))
+          (callT next-of-val hd res tl)))))
 
 ; recursive function that consumes a comment
 ; takes the result list of tokens and the string remaining (comment text is ignored)
 (defn next-of-comment (res stri)
   (if (empty stri)
     ; if the string is empty, return
-    res
+    (valT res)
     (let
       (hd (head stri))
       (tl (tail stri))
       (if (== hd '\n')
         ; if the char is a new line (end of comment), return
-        (token-rec res tl)
+        (callT token-rec res tl)
         ; otherwise, we keep going
-        (next-of-comment res tl)))))
+        (callT next-of-comment res tl)))))
 
 ; recursive function that builds up a value, meaning integer or name
 ; takes the result list of tokens, the accumulated string of the value,
@@ -288,7 +337,7 @@
 (defn next-of-val (acc res stri)
   (if (empty stri)
     ; if the string is empty, dump our accumulator and return
-    (push res acc)
+    (valT (push res acc))
     (let
       (hd (head stri))
       (tl (tail stri))
@@ -296,16 +345,16 @@
         (has whitespace hd)
           ; if the char is whitespace, then we're done with this name.
           ; dump the accumulator and return
-          (token-rec (push res acc) tl)
+          (callT token-rec (push res acc) tl)
 
         (has parens hd)
           ; if the char is parentheses, then we're done with the name
           ; dump the accumulator and return
-          (token-rec (push res acc) stri)
+          (callT token-rec (push res acc) stri)
 
         else
           ; otherwise, we keep going. append the character and continue
-          (next-of-val (str acc hd) res tl)))))
+          (callT next-of-val (str acc hd) res tl)))))
 
 ; recursive function that builds up a string
 ; takes an accumulated string
@@ -318,24 +367,60 @@
       (cond
         (&& (== hd "\\") (! escape))
           ; if the character is a slash and we haven't already set escape, then do so
-          (next-of-string (str acc hd) true res tl)
+          (callT next-of-string (str acc hd) true res tl)
 
         (&& (== hd "\"") (! escape))
           ; if the character is a double quote without escape, we're done
           ; dump the accumulator, add the quotations, and return
-          (token-rec (push res (str "\"" acc "\"")) tl)
+          (callT token-rec (push res (str "\"" acc "\"")) tl)
 
         else
           ; otherwise, keep going and adding to the string
-          (next-of-string (str acc hd) false res tl)))))
+          (callT next-of-string (str acc hd) false res tl)))))
 
 ; the final tokenize function, that starts with no tokens
 (defn tokenize (stri)
-  (token-rec nil stri))
+  (runT token-rec (list nil stri)))
 
-; builds a parse tree, takes a token list
-(defn parse (tokens)
-  (parse-rec nil tokens))
+(def INT_REGEX (str 
+  "^" ; match start
+  "(-)?" ; optional negative sign
+  "[0-9]+" ; a digit
+  "(" ; optional positive exponential
+  "(?:E|e)" ; use e or E
+  "[0-9]+)?" ; at least 1 digit
+  "$" ; match end
+  ))
+
+(def STR_REGEX (str
+  "^" ; match start
+  "\"" ; match opening quote
+  ".*" ; match any character in between
+  "\"" ; match closing quote
+  "$" ; match end
+  ))
+
+; quotes a token
+(defn quote (token)
+  (str "'" token))
+
+; "unquotes" a token by taking out the char in front
+(defn unquote (token)
+  (slice token 1))
+
+; checks if a token is quoted
+(defn is-quoted (token)
+  (== (head token) "'"))
+
+(def bools (list "true" "false"))
+
+; convert a plaintext token into a parse tree token
+(defn token-to-val (token)
+  (cond
+    (matches token INT_REGEX) token
+    (matches token STR_REGEX) token
+    (has bools token) token
+    else (quote token)))
 
 ; the parse tree recursive builder, accumulating result and remaining tokens
 (defn parse-rec (tree tokens)
@@ -398,8 +483,37 @@
           ; put the latest token into the nested lists
           (parse-stmt place (push-from-bottom tree (token-to-val hd) place) tl)))))
 
+; builds a parse tree, takes a token list
+(defn parse (tokens)
+  (parse-rec nil tokens))
+
+; replaces the exclamation point out
+(defn repl-chars (name)
+  (resplit (resplit name "!" "Excl") "*" "Astsk"))
+
+; sanitizes names, removes dashes and exclamation points
+(defn sanitize (name)
+  (let
+    (replaced (repl-chars name))
+    ; find the next dash
+    (index-dash (index-of replaced  "-"))
+    (if (== -1 index-dash)
+      ; if it's not there, then we're done
+      replaced
+      ; otherwise keep going
+      (str 
+        (slice replaced 0 index-dash) 
+        (upper (at replaced (+ index-dash 1))) 
+        (sanitize (slice replaced (+ index-dash 2)))))))
+
+; whether the expression currently evaluated is at the root
+(def *at-root* (new-var false))
+
+; the current exports
+(def *exports* (new-var nil))
+
 ; the list of compiler macros
-(def macros (object))
+(def macros (new-object))
 
 ; unary negation operator
 (obj-set! macros "!" (fn (tree)
@@ -444,7 +558,17 @@
 (obj-set! macros "def" (fn (tree)
   (if (== (len tree) 2)
     ; of the form (def <name> <expr>)
-    (str "var " (sanitize (unquote (head tree))) " = " (compile-expr (at tree 1)))
+    (do 
+      (def name (sanitize (unquote (head tree))))
+      (if (var-get *at-root*)
+        (var-swap! *exports* (fn (exports)
+          (push exports name)))
+        nil)
+      (str 
+        "var " 
+        name
+        " = " 
+        (compile-expr (at tree 1))))
     (err "def takes two args"))))
 
 ; the if macro
@@ -464,6 +588,7 @@
     ; of the form (do <expr>+)
     (err "do takes at least one arg")
     (let
+      (_ (var-set! *at-root* false))
       (mapper (comp (fn (s) (str s ";\n")) compile-expr))
       (mapped (map (init tree) mapper))
       (joined (join mapped ""))
@@ -477,7 +602,7 @@
   (if (== (len tree) 2)
     ; of the form (fn <expr> <expr>)
     (let
-      (argsList (map (head tree) unquote))
+      (argsList (map (head tree) (comp sanitize unquote)))
       (joinedArgs (join argsList ", "))
       (expr (compile-expr (at tree 1)))
       (str "function(" joinedArgs "){ return " expr "; }"))
@@ -524,79 +649,50 @@
           (list (quote "if") (head con) (at con 1) acc)) lt))
         (compile-expr form)))))
 
-; attempts to run a macro
-(defn tryMacros (key tree)
-  (if (has-key macros key)
-    ((obj-get macros key)(tail tree))
-    tree))
+; while macro
+(obj-set! macros "while" (fn (tree)
+  (if (>= (len tree) 2)
+    ; of the form (while <expr> <ex1> <ex2> <ex3>)
+    (let
+      (mapper (comp (fn (s) (str s ";\n")) compile-expr))
+      (mapped (map (tail tree) mapper))
+      (joined (join mapped ""))
+      (str 
+        "while(" (compile-expr (head tree)) "){\n"
+        joined
+        "}"))
+    (err "while takes at least two args"))))
 
-(def INT_REGEX (str 
-  "^" ; match start
-  "(-)?" ; optional negative sign
-  "[0-9]+" ; a digit
-  "(" ; optional positive exponential
-  "(?:E|e)" ; use e or E
-  "[0-9]+)?" ; at least 1 digit
-  "$" ; match end
-  ))
-
-(def STR_REGEX (str
-  "^" ; match start
-  "\"" ; match opening quote
-  ".*" ; match any character in between
-  "\"" ; match closing quote
-  "$" ; match end
-  ))
-
-(def bools (list "true" "false"))
-
-; convert a plaintext token into a parse tree token
-(defn token-to-val (token)
-  (cond
-    (matches token INT_REGEX) token
-    (matches token STR_REGEX) token
-    (has bools token) token
-    else (quote token)))
-
-; quotes a token
-(defn quote (token)
-  (str "'" token))
-
-; "unquotes" a token by taking out the char in front
-(defn unquote (token)
-  (slice token 1))
-
-; checks if a token is quoted
-(defn is-quoted (token)
-  (== (head token) "'"))
+; set! macro
+(obj-set! macros "set!" (fn (tree)
+  (if (>= (len tree) 2)
+    ; of the form (set! <name> <val>)
+    (let
+      (name (sanitize (unquote (head tree))))
+      (body (compile-expr (at tree 1)))
+      (str name " = " body))
+    (err "while takes at least two args"))))
 
 ; takes a parse tree and compiles it into JS
 (defn compile (tree)
   (if (empty tree)
-    ""
-    (str 
-      ; compiles the next expression
-      (compile-expr (head tree)) 
-      ";\n"
-      (compile (tail tree)))))
-
-; replaces the exclamation point out
-(defn repl-excl (name)
-  (replace name "!" "Excl"))
-
-; sanitizes names, removes dashes and exclamation points
-(defn sanitize (name)
-  (let
-    ; find the next dash
-    (index-dash (index-of name "-"))
-    (if (== -1 index-dash)
-      ; if it's not there, then we're done
-      (repl-excl name)
-      ; otherwise keep going
+    (let
+      ; assemble exports
+      (exp (var-get *exports*))
+      (exp-list (join exp " "))
+      ;(setters (map exp (fn (e) (str "export('" e "', " e ");\n"))))
+      (setters nil)
+      (setters-joined (join setters ""))
+      (str
+        setters-joined
+        "// QUIDDITCH-EXPORTS " exp-list "\n"))
+    (do 
+      (var-set! *at-root* true)
       (str 
-        (slice name 0 index-dash) 
-        (upper (at name (+ index-dash 1))) 
-        (sanitize (slice name (+ index-dash 2)))))))
+        ; compiles the next expression
+        (compile-expr (head tree)) 
+        ";\n"
+        (compile (tail tree))))))
 
 ; compiles a parse tree
 (defn compile-expr (expr)
@@ -652,7 +748,6 @@
     (def compiled (compile parsed))
 
     ; (log (util.inspect parsed {depth:null}))
-
     (log compiled)))
 
 ; run the main function with the passed-in command line args

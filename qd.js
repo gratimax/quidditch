@@ -1,10 +1,7 @@
-var object = function(){ return {}; };
+var newObject = function(){ return {}; };
 var objGet = function(obj, key){ return obj[key]; };
 var objSetExcl = function(obj, key, value){ return (function(){
 obj[key]=value;
-return obj;})(); };
-var vset = function(obj, value){ return (function(){
-obj=value;
 return obj;})(); };
 var hasKey = function(obj, key){ return (obj[key]&&obj.hasOwnProperty(key)); };
 var cons = function(a1, a2){ return [a1].concat(a2); };
@@ -31,6 +28,16 @@ var app = function(f, args){ return f.apply(null, args); };
 var log = function(msg){ return console.log(msg); };
 var err = function(msg){ return console.error(msg); };
 var argv = process.argv;
+var newVar = function(initial){ return (function(){
+var AstskvarAstsk = newObject();
+objSetExcl(AstskvarAstsk, "value", initial);
+return AstskvarAstsk;})(); };
+var varSetExcl = function(AstskvarAstsk, value){ return objSetExcl(AstskvarAstsk, "value", value); };
+var varGet = function(AstskvarAstsk){ return objGet(AstskvarAstsk, "value"); };
+var varSwapExcl = function(AstskvarAstsk, f){ return (function(){
+var curVal = varGet(AstskvarAstsk);
+var newVal = f(curVal);
+return varSetExcl(AstskvarAstsk, newVal);})(); };
 var list = function(){ return toArray(arguments); };
 var empty = function(l){ return (len(l)===0); };
 var init = function(l){ return slice(l, 0, (len(l)-1)); };
@@ -47,34 +54,51 @@ var take = function(i, coll){ return ((i===0) ? [] : push(take((i-1), coll), at(
 var group2 = function(coll){ return (empty(coll) ? [] : cons(list(head(coll), at(coll, 1)), group2(from(coll, 2)))); };
 var reverse = function(coll){ return fold(coll, function(acc, cur){ return cons(cur, acc); }, []); };
 var comp = function(a, b){ return function(){ return a(app(b, toArray(arguments))); }; };
+var resplit = function(s, mat, val){ return join(split(s, mat), val); };
 var str = function(){ return join(toArray(arguments), ""); };
 var isArray = function(obj){ return (objStr(obj)==="[object Array]"); };
 var isString = function(obj){ return (objStr(obj)==="[object String]"); };
 var debug = function(str, val){ return (function(){
 log(str);
 return val;})(); };
+var callCons = function(f, args){ return list("trampoline-call", f, args); };
+var callT = function(f){ return callCons(f, tail(toArray(arguments))); };
+var valT = function(v){ return list("trampoline-val", v); };
+var isCall = function(trampoline){ return (head(trampoline)==="trampoline-call"); };
+var runT = function(f, start){ return (function(){
+var trampoline = callCons(f, start);
+while(isCall(trampoline)){
+trampoline = app(at(trampoline, 1), at(trampoline, 2));
+};
+return at(trampoline, 1);})(); };
 var parens = list("(", ")");
 var whitespace = list(" ", "\n");
 var skipSpace = function(stri){ return (empty(stri) ? stri : (has(whitespace, head(stri)) ? skipSpace(tail(stri)) : stri)); };
-var tokenRec = function(res, stri){ return (empty(stri) ? res : (function(){
+var tokenRec = function(res, stri){ return (empty(stri) ? valT(res) : (function(){
 var noSpaces = skipSpace(stri);
 var hd = head(noSpaces);
 var tl = tail(noSpaces);
-return (has(parens, hd) ? tokenRec(push(res, hd), tl) : ((hd==="\"") ? nextOfString("", false, res, tl) : ((hd===";") ? nextOfComment(res, tl) : nextOfVal(hd, res, tl))));})()); };
-var nextOfComment = function(res, stri){ return (empty(stri) ? res : (function(){
+return (has(parens, hd) ? callT(tokenRec, push(res, hd), tl) : ((hd==="\"") ? callT(nextOfString, "", false, res, tl) : ((hd===";") ? callT(nextOfComment, res, tl) : callT(nextOfVal, hd, res, tl))));})()); };
+var nextOfComment = function(res, stri){ return (empty(stri) ? valT(res) : (function(){
 var hd = head(stri);
 var tl = tail(stri);
-return ((hd==='\n') ? tokenRec(res, tl) : nextOfComment(res, tl));})()); };
-var nextOfVal = function(acc, res, stri){ return (empty(stri) ? push(res, acc) : (function(){
+return ((hd==='\n') ? callT(tokenRec, res, tl) : callT(nextOfComment, res, tl));})()); };
+var nextOfVal = function(acc, res, stri){ return (empty(stri) ? valT(push(res, acc)) : (function(){
 var hd = head(stri);
 var tl = tail(stri);
-return (has(whitespace, hd) ? tokenRec(push(res, acc), tl) : (has(parens, hd) ? tokenRec(push(res, acc), stri) : nextOfVal(str(acc, hd), res, tl)));})()); };
+return (has(whitespace, hd) ? callT(tokenRec, push(res, acc), tl) : (has(parens, hd) ? callT(tokenRec, push(res, acc), stri) : callT(nextOfVal, str(acc, hd), res, tl)));})()); };
 var nextOfString = function(acc, escape, res, stri){ return (empty(stri) ? err("next of string expected more characters") : (function(){
 var hd = head(stri);
 var tl = tail(stri);
-return (((hd==="\\")&&!(escape)) ? nextOfString(str(acc, hd), true, res, tl) : (((hd==="\"")&&!(escape)) ? tokenRec(push(res, str("\"", acc, "\"")), tl) : nextOfString(str(acc, hd), false, res, tl)));})()); };
-var tokenize = function(stri){ return tokenRec([], stri); };
-var parse = function(tokens){ return parseRec([], tokens); };
+return (((hd==="\\")&&!(escape)) ? callT(nextOfString, str(acc, hd), true, res, tl) : (((hd==="\"")&&!(escape)) ? callT(tokenRec, push(res, str("\"", acc, "\"")), tl) : callT(nextOfString, str(acc, hd), false, res, tl)));})()); };
+var tokenize = function(stri){ return runT(tokenRec, list([], stri)); };
+var INT_REGEX = str("^", "(-)?", "[0-9]+", "(", "(?:E|e)", "[0-9]+)?", "$");
+var STR_REGEX = str("^", "\"", ".*", "\"", "$");
+var quote = function(token){ return str("'", token); };
+var unquote = function(token){ return slice(token, 1); };
+var isQuoted = function(token){ return (head(token)==="'"); };
+var bools = list("true", "false");
+var tokenToVal = function(token){ return (matches(token, INT_REGEX) ? token : (matches(token, STR_REGEX) ? token : (has(bools, token) ? token : quote(token)))); };
 var parseRec = function(tree, tokens){ return (empty(tokens) ? tree : (function(){
 var hd = head(tokens);
 var tl = tail(tokens);
@@ -84,22 +108,34 @@ var parseStmt = function(place, tree, tokens){ return (empty(tokens) ? err("erro
 var hd = head(tokens);
 var tl = tail(tokens);
 return ((hd===")") ? ((place===1) ? parseRec(tree, tl) : parseStmt((place-1), tree, tl)) : ((hd==="(") ? parseStmt((place+1), pushFromBottom(tree, [], place), tl) : parseStmt(place, pushFromBottom(tree, tokenToVal(hd), place), tl)));})()); };
-var macros = object();
+var parse = function(tokens){ return parseRec([], tokens); };
+var replChars = function(name){ return resplit(resplit(name, "!", "Excl"), "*", "Astsk"); };
+var sanitize = function(name){ return (function(){
+var replaced = replChars(name);
+var indexDash = indexOf(replaced, "-");
+return ((-1===indexDash) ? replaced : str(slice(replaced, 0, indexDash), upper(at(replaced, (indexDash+1))), sanitize(slice(replaced, (indexDash+2)))));})(); };
+var AstskatRootAstsk = newVar(false);
+var AstskexportsAstsk = newVar([]);
+var macros = newObject();
 objSetExcl(macros, "!", function(tree){ return ((len(tree)===1) ? str("!(", compileExpr(head(tree)), ")") : err("! takes one arg")); });
 var infix = list("+", "-", "/", "*", "&&", "||", "<", ">", "<=", ">=");
 foreach(infix, function(infix){ return objSetExcl(macros, infix, function(tree){ return ((len(tree)===2) ? str("(", compileExpr(head(tree)), infix, compileExpr(at(tree, 1)), ")") : err(str(infix, " takes two args"))); }); });
 objSetExcl(macros, "==", function(tree){ return ((len(tree)===2) ? str("(", compileExpr(head(tree)), "===", compileExpr(at(tree, 1)), ")") : err("== takes two args")); });
 objSetExcl(macros, "!=", function(tree){ return ((len(tree)===2) ? str("(", compileExpr(head(tree)), "!==", compileExpr(at(tree, 1)), ")") : err("!= takes two args")); });
 objSetExcl(macros, "mod", function(tree){ return ((len(tree)===2) ? str("(", compileExpr(head(tree)), "%", compileExpr(at(tree, 1)), ")") : err("mod takes two args")); });
-objSetExcl(macros, "def", function(tree){ return ((len(tree)===2) ? str("var ", sanitize(unquote(head(tree))), " = ", compileExpr(at(tree, 1))) : err("def takes two args")); });
+objSetExcl(macros, "def", function(tree){ return ((len(tree)===2) ? (function(){
+var name = sanitize(unquote(head(tree)));
+(varGet(AstskatRootAstsk) ? varSwapExcl(AstskexportsAstsk, function(exports){ return push(exports, name); }) : []);
+return str("var ", name, " = ", compileExpr(at(tree, 1)));})() : err("def takes two args")); });
 objSetExcl(macros, "if", function(tree){ return ((len(tree)===3) ? str("(", compileExpr(head(tree)), " ? ", compileExpr(at(tree, 1)), " : ", compileExpr(at(tree, 2)), ")") : err("if takes three args")); });
 objSetExcl(macros, "do", function(tree){ return ((len(tree)===0) ? err("do takes at least one arg") : (function(){
+var _ = varSetExcl(AstskatRootAstsk, false);
 var mapper = comp(function(s){ return str(s, ";\n"); }, compileExpr);
 var mapped = map(init(tree), mapper);
 var joined = join(mapped, "");
 return str("(function(){\n", joined, "return ", compileExpr(last(tree)), ";})()");})()); });
 objSetExcl(macros, "fn", function(tree){ return ((len(tree)===2) ? (function(){
-var argsList = map(head(tree), unquote);
+var argsList = map(head(tree), comp(sanitize, unquote));
 var joinedArgs = join(argsList, ", ");
 var expr = compileExpr(at(tree, 1));
 return str("function(", joinedArgs, "){ return ", expr, "; }");})() : err("fn takes two args")); });
@@ -120,19 +156,23 @@ var rest = slice(tree, 0, (len(tree)-2));
 var grouped = group2(rest);
 var form = foldR(grouped, function(acc, con){ return list(quote("if"), head(con), at(con, 1), acc); }, lt);
 return compileExpr(form);})())); });
-var tryMacros = function(key, tree){ return (hasKey(macros, key) ? (objGet(macros, key))(tail(tree)) : tree); };
-var INT_REGEX = str("^", "(-)?", "[0-9]+", "(", "(?:E|e)", "[0-9]+)?", "$");
-var STR_REGEX = str("^", "\"", ".*", "\"", "$");
-var bools = list("true", "false");
-var tokenToVal = function(token){ return (matches(token, INT_REGEX) ? token : (matches(token, STR_REGEX) ? token : (has(bools, token) ? token : quote(token)))); };
-var quote = function(token){ return str("'", token); };
-var unquote = function(token){ return slice(token, 1); };
-var isQuoted = function(token){ return (head(token)==="'"); };
-var compile = function(tree){ return (empty(tree) ? "" : str(compileExpr(head(tree)), ";\n", compile(tail(tree)))); };
-var replExcl = function(name){ return replace(name, "!", "Excl"); };
-var sanitize = function(name){ return (function(){
-var indexDash = indexOf(name, "-");
-return ((-1===indexDash) ? replExcl(name) : str(slice(name, 0, indexDash), upper(at(name, (indexDash+1))), sanitize(slice(name, (indexDash+2)))));})(); };
+objSetExcl(macros, "while", function(tree){ return ((len(tree)>=2) ? (function(){
+var mapper = comp(function(s){ return str(s, ";\n"); }, compileExpr);
+var mapped = map(tail(tree), mapper);
+var joined = join(mapped, "");
+return str("while(", compileExpr(head(tree)), "){\n", joined, "}");})() : err("while takes at least two args")); });
+objSetExcl(macros, "set!", function(tree){ return ((len(tree)>=2) ? (function(){
+var name = sanitize(unquote(head(tree)));
+var body = compileExpr(at(tree, 1));
+return str(name, " = ", body);})() : err("while takes at least two args")); });
+var compile = function(tree){ return (empty(tree) ? (function(){
+var exp = varGet(AstskexportsAstsk);
+var expList = join(exp, " ");
+var setters = [];
+var settersJoined = join(setters, "");
+return str(settersJoined, "// QUIDDITCH-EXPORTS ", expList, "\n");})() : (function(){
+varSetExcl(AstskatRootAstsk, true);
+return str(compileExpr(head(tree)), ";\n", compile(tail(tree)));})()); };
 var compileExpr = function(expr){ return (isArray(expr) ? (function(){
 var hd = head(expr);
 var tl = tail(expr);
@@ -155,4 +195,5 @@ var parsed = parse(tokens);
 var compiled = compile(parsed);
 return log(compiled);})(); };
 main(argv);
+// QUIDDITCH-EXPORTS newObject objGet objSetExcl hasKey cons conc len indexOf replace head objStr matches slice split join foreach map reduce reduceR fold foldR upper lower toArray app log err argv newVar varSetExcl varGet varSwapExcl list empty init last push has at from tail irange range zip take group2 reverse comp resplit str isArray isString debug callCons callT valT isCall runT parens whitespace skipSpace tokenRec nextOfComment nextOfVal nextOfString tokenize INT_REGEX STR_REGEX quote unquote isQuoted bools tokenToVal parseRec pushFromBottom parseStmt parse replChars sanitize AstskatRootAstsk AstskexportsAstsk macros infix compile compileExpr main
 
