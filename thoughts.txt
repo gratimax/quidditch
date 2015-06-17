@@ -51,3 +51,4 @@
 - best thing to be able to do trampoline and it works pretty well
   (my-fn my-arg-1 my-arg-2) -> (callT my-fn my-arg-1 my-arg-2)
 - took about 10 minutes debugging and 5 minutes to implement in compiler, works flawlessly and simple implementation!
+- warning: often when you make mistakes it is somewhat hard to recover

@@ -325,7 +325,7 @@
     (let
       (hd (head stri))
       (tl (tail stri))
-      (if (== hd '\n')
+      (if (== hd "\n")
         ; if the char is a new line (end of comment), return
         (callT token-rec res tl)
         ; otherwise, we keep going
@@ -489,7 +489,7 @@
 
 ; replaces the exclamation point out
 (defn repl-chars (name)
-  (resplit (resplit name "!" "Excl") "*" "Astsk"))
+  (resplit (resplit (resplit name "?" "Ques") "!" "Excl") "*" "Astsk"))
 
 ; sanitizes names, removes dashes and exclamation points
 (defn sanitize (name)
@@ -511,6 +511,12 @@
 
 ; the current exports
 (def *exports* (new-var nil))
+
+; whether the generated code should have newline?s
+(def pretty? false)
+
+; the optional newline? character
+(def newline? (if pretty? "\n" ""))
 
 ; the list of compiler macros
 (def macros (new-object))
@@ -589,10 +595,10 @@
     (err "do takes at least one arg")
     (let
       (_ (var-set! *at-root* false))
-      (mapper (comp (fn (s) (str s ";\n")) compile-expr))
+      (mapper (comp (fn (s) (str s ";" newline?)) compile-expr))
       (mapped (map (init tree) mapper))
       (joined (join mapped ""))
-      (str "(function(){\n"
+      (str "(function(){" newline?
         joined
         "return " (compile-expr (last tree))
         ";})()")))))
@@ -654,11 +660,11 @@
   (if (>= (len tree) 2)
     ; of the form (while <expr> <ex1> <ex2> <ex3>)
     (let
-      (mapper (comp (fn (s) (str s ";\n")) compile-expr))
+      (mapper (comp (fn (s) (str s ";" newline?)) compile-expr))
       (mapped (map (tail tree) mapper))
       (joined (join mapped ""))
       (str 
-        "while(" (compile-expr (head tree)) "){\n"
+        "while(" (compile-expr (head tree)) "){" newline?
         joined
         "}"))
     (err "while takes at least two args"))))
@@ -680,18 +686,18 @@
       ; assemble exports
       (exp (var-get *exports*))
       (exp-list (join exp " "))
-      ;(setters (map exp (fn (e) (str "export('" e "', " e ");\n"))))
+      ;(setters (map exp (fn (e) (str "export('" e "', " e ");" newline?))))
       (setters nil)
       (setters-joined (join setters ""))
       (str
         setters-joined
-        "// QUIDDITCH-EXPORTS " exp-list "\n"))
+        "// QUIDDITCH-EXPORTS " exp-list newline?))
     (do 
       (var-set! *at-root* true)
       (str 
         ; compiles the next expression
         (compile-expr (head tree)) 
-        ";\n"
+        ";" newline?
         (compile (tail tree))))))
 
 ; compiles a parse tree
