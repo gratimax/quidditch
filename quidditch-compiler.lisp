@@ -744,20 +744,52 @@
     ; no other special forms, so we just return the expr
     else expr))
 
+; runs the compiler on some code
+(defn run-compiler (source)
+  (let
+    (tokens (tokenize source))
+    (parsed (parse tokens))
+    (compiled (compile parsed))
+    compiled))
+
 ; the main function. Takes a list of string args
 (defn main (args)
-  (do
-    (def fs (require "fs"))
-    (def util (require "util"))
+  (let
+    (fs (require "fs"))
+    (util (require "util"))
 
-    (def file (fs.read-file-sync (at args 2) "utf-8"))
+    (len-args (len args))
 
-    (def tokens (tokenize file))
-    (def parsed (parse tokens))
-    (def compiled (compile parsed))
+    (cond
 
-    ; (log (util.inspect parsed {depth:null}))
-    (log compiled)))
+      ; we are not given anything, start the repl
+      (== len-args 2)
+        (do
+          (def stdin process.stdin)
+          (def stdout process.stdout)
+          (def vm (require "vm"))
+          (def sandbox (vm.createContext))
+          (log "Quidditch repl (ctrl-c to exit)")
+          (stdout.write "> ")
+          (stdin.setEncoding "utf8")
+          (stdin.on "readable" (fn ()
+            (let
+              (chunk (stdin.read))
+              (if (!= chunk null)
+                (let
+                  (compiled (run-compiler chunk))
+                  ; should use custom evaluator later on
+                  (evaled (vm.runInContext compiled sandbox))
+                  (inspected (util.inspect evaled {depth:null}))
+                  (stdout.write (str evaled "\n> ")))
+                nil)))))
+
+      ; we are given a file, compile it
+      (== len-args 3)
+        (let
+          (file (fs.read-file-sync (at args 2) "utf-8"))
+          (compiled (run-compiler file))
+          (log compiled)))))
 
 ; run the main function with the passed-in command line args
 (main argv)
