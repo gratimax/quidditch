@@ -175,7 +175,7 @@
     (== i 0)
       (head l)
 
-    else 
+    else
       (at (tail l) (- i 1))))
 
 ; slices a collection from a start
@@ -197,7 +197,7 @@
   (init (irange end)))
 
 ; zips two same-length collections into one of lists
-(defn zip (coll1 coll2) 
+(defn zip (coll1 coll2)
   (if (== (len coll1) (len coll2))
     (map (range (len coll1)) (fn (i) (list (at coll1 i) (at coll2 i))))
     (err "collections must be same size")))
@@ -221,7 +221,7 @@
 
 ; composes two functions together
 (defn comp (a b)
-  (fn () 
+  (fn ()
     (a (app b (to-array arguments)))))
 
 ; replace except using split
@@ -292,29 +292,32 @@
 ; the internal recursive token accumulator.
 ; takes the result (a list of tokens) and the string that is being processed
 (defn token-rec (res stri)
-  (if (empty stri)
-    ; if the string is empty, we're finished
-    (valT res)
-    (let
-      (no-spaces (skip-space stri))
-      (hd (head no-spaces))
-      (tl (tail no-spaces))
-      (cond
-        (has parens hd)
-          ; if the token is one of the parentheses, add it automatically
-          (callT token-rec (push res hd) tl)
+  (let
+    (no-spaces (skip-space stri))
+    (if (empty no-spaces)
+      ; if the string is empty, we're finished
+      (valT res)
+      (let
 
-        (== hd "\"")
-          ; if the token is the double quote, then we need to do a string
-          (callT next-of-string "" false res tl)
+        (hd (head no-spaces))
+        (tl (tail no-spaces))
+        (cond
+          (has parens hd)
+            ; if the token is one of the parentheses, add it automatically
+            (callT token-rec (push res hd) tl)
 
-        (== hd ";")
-          ; if the character is a semicolon, start comment
-          (callT next-of-comment res tl)
+          (== hd "\"")
+            ; if the token is the double quote, then we need to do a string
+            (callT next-of-string "" false res tl)
 
-        else
-          ; otherwise, let's try to make a value
-          (callT next-of-val hd res tl)))))
+          (== hd ";")
+            ; if the character is a semicolon, start comment
+            (callT next-of-comment res tl)
+
+          else
+            ; otherwise, let's try to make a value
+            (callT next-of-val hd res tl))))))
+
 
 ; recursive function that consumes a comment
 ; takes the result list of tokens and the string remaining (comment text is ignored)
@@ -382,7 +385,7 @@
 (defn tokenize (stri)
   (runT token-rec (list nil stri)))
 
-(def INT_REGEX (str 
+(def INT_REGEX (str
   "^" ; match start
   "(-)?" ; optional negative sign
   "[0-9]+" ; a digit
@@ -450,8 +453,8 @@
     (push coll item)
     ; otherwise, we need to keep going.
     ; since we're modifying the last item of the list, we pop it off, modify it, and push it back on
-    (push 
-      (init coll) 
+    (push
+      (init coll)
       ; do push-from-bottom, going down a place
       (push-from-bottom (last coll) item (- place 1)))))
 
@@ -464,7 +467,7 @@
       (hd (head tokens))
       (tl (tail tokens))
       (cond
-        ; if we encounter a closing brace, 
+        ; if we encounter a closing brace,
         (== hd ")")
           (if (== place 1)
             ; if we're at the bottom-most statement, then we go back to the root
@@ -501,9 +504,9 @@
       ; if it's not there, then we're done
       replaced
       ; otherwise keep going
-      (str 
-        (slice replaced 0 index-dash) 
-        (upper (at replaced (+ index-dash 1))) 
+      (str
+        (slice replaced 0 index-dash)
+        (upper (at replaced (+ index-dash 1)))
         (sanitize (slice replaced (+ index-dash 2)))))))
 
 ; whether the expression currently evaluated is at the root
@@ -564,16 +567,16 @@
 (obj-set! macros "def" (fn (tree)
   (if (== (len tree) 2)
     ; of the form (def <name> <expr>)
-    (do 
+    (do
       (def name (sanitize (unquote (head tree))))
       (if (var-get *at-root*)
         (var-swap! *exports* (fn (exports)
           (push exports name)))
         nil)
-      (str 
-        "var " 
+      (str
+        "var "
         name
-        " = " 
+        " = "
         (compile-expr (at tree 1))))
     (err "def takes two args"))))
 
@@ -581,9 +584,9 @@
 (obj-set! macros "if" (fn (tree)
   (if (== (len tree) 3)
     ; of the form (if <expr> <expr> <expr>)
-    (str 
-      "(" (compile-expr (head tree)) 
-      " ? " (compile-expr (at tree 1)) 
+    (str
+      "(" (compile-expr (head tree))
+      " ? " (compile-expr (at tree 1))
       " : " (compile-expr (at tree 2))
       ")")
     (err "if takes three args"))))
@@ -663,7 +666,7 @@
       (mapper (comp (fn (s) (str s ";" newline?)) compile-expr))
       (mapped (map (tail tree) mapper))
       (joined (join mapped ""))
-      (str 
+      (str
         "while(" (compile-expr (head tree)) "){" newline?
         joined
         "}"))
@@ -692,17 +695,17 @@
       (str
         setters-joined
         "// QUIDDITCH-EXPORTS " exp-list newline?))
-    (do 
+    (do
       (var-set! *at-root* true)
-      (str 
+      (str
         ; compiles the next expression
-        (compile-expr (head tree)) 
+        (compile-expr (head tree))
         ";" newline?
         (compile (tail tree))))))
 
 ; compiles a parse tree
 (defn compile-expr (expr)
-  (cond 
+  (cond
     ; we have either an s-expression or a macro to expand
     (is-array expr)
       (let
@@ -731,11 +734,11 @@
 
     ; we have a string
     (is-quoted expr)
-      ; perhaps some more sophisticated deref in the future
-      ; for now, a rather simple unquote
       (if (== expr (quote "nil"))
         ; nil is a special value
         "[]"
+        ; perhaps some more sophisticated deref in the future
+        ; for now, a rather simple unquote
         (unquote (sanitize expr)))
 
     ; no other special forms, so we just return the expr

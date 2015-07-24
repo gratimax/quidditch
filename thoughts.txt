@@ -30,7 +30,7 @@
 - cannot test it on actual source - stack overflow
 - stack-size=10000
 - develop with bootstrapped compiler - keep the existing one, use it on tests
-- next step - write a parser to generate a parsed AST 
+- next step - write a parser to generate a parsed AST
 - first time developing 100% with bootstrapped compiler - actually quite nice
 - oh dear! compiler malfunction I didn't catch:
   ((my-call x) z) goes to (z)
@@ -52,3 +52,4 @@
   (my-fn my-arg-1 my-arg-2) -> (callT my-fn my-arg-1 my-arg-2)
 - took about 10 minutes debugging and 5 minutes to implement in compiler, works flawlessly and simple implementation!
 - warning: often when you make mistakes it is somewhat hard to recover
+- whoops, did not handle newlines!!! when I set editor to always have newlines this was a problem
