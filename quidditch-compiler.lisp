@@ -781,7 +781,7 @@
                   ; should use custom evaluator later on
                   (evaled (vm.runInContext compiled sandbox))
                   (inspected (util.inspect evaled {depth:null}))
-                  (stdout.write (str evaled "\n> ")))
+                  (stdout.write (str inspected "\n> ")))
                 nil)))))
 
       ; we are given a file, compile it
