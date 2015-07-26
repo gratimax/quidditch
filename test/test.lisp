@@ -37,3 +37,5 @@
       (set! x (+ x 1)))
     x))
 
+
+(defn a (x) (js "return x"))

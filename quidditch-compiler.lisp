@@ -1,119 +1,131 @@
 ; quidditch "native functions"
 ; because the runtime is pretty horrible, these functions need to exist
 
+; calls a js function
+(defn js-call (obj f)
+  (js "obj[f].apply(obj, Array.prototype.slice.call(arguments, 2))"))
+
 ; creates a mutable js object
 (defn new-object ()
-  {})
+  (js "{}"))
 
 ; gets the key of an object
 (defn obj-get (obj key)
-  obj[key])
+  (js "obj[key]"))
+
+; same function, but when used in js interop context
+(def js-get obj-get)
 
 ; sets the key of an object to the given value
 (defn obj-set! (obj key value)
   (do
-    obj[key]=value
+    (js "obj[key] = value")
     obj))
 
 ; checks if the obj has a key
 (defn has-key (obj key)
-  (&& obj[key] (obj.hasOwnProperty key)))
+  (&& (js "obj[key]") (js-call obj "hasOwnProperty" key)))
 
 ; builds a list from a head and tail
 (defn cons (a1 a2)
-  ([a1].concat a2))
+  (js-call (js "[a1]") "concat" a2))
 
 ; concats the given lists, second after first
 (defn conc (a1 a2)
-  (a1.concat a2))
+  (js-call a1 "concat" a2))
 
 ; gets the length of a collection
 (defn len (coll)
-  coll.length)
+  (js-get coll "length"))
 
 ; gets the index of an item in a collection
 (defn index-of (coll i)
-  (coll.indexOf i))
+  (js-call coll "indexOf" i))
 
 ; replaces something in a string
 (defn replace (s mat val)
-  (s.replace mat val))
+  (js-call s "replace" mat val))
 
 ; gets the first element of a collection
 (defn head (l)
-  l[0])
+  (js "l[0]"))
 
 ; gets the object string for an object
 (defn obj-str (obj)
-  (Object.prototype.toString.call obj))
+  (js "Object.prototype.toString.call(obj)"))
 
 ; checks if the string matches the given regex
 (defn matches (stri regex)
-  (stri.match regex))
+  (js-call stri "match" regex))
 
 ; slices a collection from start to an end
 (defn slice (l start end)
-  (l.slice start end))
+  (js-call l "slice" start end))
 
 ; splits a string
 (defn split (s splitter)
-  (s.split splitter))
+  (js-call s "split" splitter))
 
 ; joins a collection
 (defn join (coll s)
-  (coll.join s))
+  (js-call coll "join" s))
 
 ; does a function for each elem in the collection
 (defn foreach (coll f)
-  (coll.forEach f))
+  (js-call coll "forEach" f))
 
 ; maps the collection via some function
 (defn map (coll f)
-  (coll.map f))
+  (js-call coll "map" f))
 
 ; reduces the collection via some aggregate function
 (defn reduce (coll f)
-  (coll.reduce f))
+  (js-call coll "reduce" f))
 
 ; reduce from the right
 (defn reduce-r (coll f)
-  (coll.reduceRight f))
+  (js-call coll "reduceRight" f))
 
 ; folds the collection via some aggregate function and starting value
 (defn fold (coll f init)
-  (coll.reduce f init))
+  (js-call coll "reduce" f init))
 
 ; folds from the right
 (defn fold-r (coll f init)
-  (coll.reduceRight f init))
+  (js-call coll "reduceRight" f init))
 
 ; string upper
 (defn upper (s)
-  (s.toUpperCase))
+  (js-call s "toUpperCase"))
 
 ; string lower
 (defn lower (s)
-  (s.toLowerCase))
+  (js-call s "toLowerCase"))
 
 ; coerces into an array, welcome to JS
 ; mostly used for arguments
 (defn to-array (coll)
-  (Array.prototype.slice.call coll))
+  (js "Array.prototype.slice.call(coll)"))
 
 ; list application of function arguments
 (defn app (f args)
-  (f.apply null args))
+  (js-call f "apply" null args))
 
-; logs a message to the console
+; logs a message to the console, returns the message
 (defn log (msg)
-  (console.log msg))
+  (do
+    (js-call console "log" msg)
+    msg))
 
-; logs an error to the console
+; logs an error to the console, returns the error
 (defn err (msg)
-  (console.error msg))
+  (do
+    (js-call console "error" msg)
+    msg))
 
 ; gets the process args
-(def argv process.argv)
+(def argv (js-get process "argv"))
+
 ; Quidditch in-language library functions
 ; this is where lisp is somewhat nice :)
 
@@ -674,13 +686,20 @@
 
 ; set! macro
 (obj-set! macros "set!" (fn (tree)
-  (if (>= (len tree) 2)
+  (if (== (len tree) 2)
     ; of the form (set! <name> <val>)
     (let
       (name (sanitize (unquote (head tree))))
       (body (compile-expr (at tree 1)))
       (str name " = " body))
-    (err "while takes at least two args"))))
+    (err "set takes only two args"))))
+
+; js eval macro, passes string straight through
+(obj-set! macros "js" (fn (tree)
+  (if (== (len tree) 1)
+    ; of the form (js "<js>")
+    (init (tail (head tree)))
+    (err "js takes only one arg"))))
 
 ; takes a parse tree and compiles it into JS
 (defn compile (tree)
@@ -755,7 +774,6 @@
 ; the main function. Takes a list of string args
 (defn main (args)
   (let
-    (fs (require "fs"))
     (util (require "util"))
 
     (len-args (len args))
@@ -765,29 +783,30 @@
       ; we are not given anything, start the repl
       (== len-args 2)
         (do
-          (def stdin process.stdin)
-          (def stdout process.stdout)
+          (def stdin (js-get process "stdin"))
+          (def stdout (js-get process "stdout"))
           (def vm (require "vm"))
-          (def sandbox (vm.createContext))
+          (def sandbox (js-call vm "createContext"))
           (log "Quidditch repl (ctrl-c to exit)")
-          (stdout.write "> ")
-          (stdin.setEncoding "utf8")
-          (stdin.on "readable" (fn ()
+          (js-call stdout "write" "> ")
+          (js-call stdin "setEncoding" "utf8")
+          (js-call stdin "on" "readable" (fn ()
             (let
-              (chunk (stdin.read))
+              (chunk (js-call stdin "read"))
               (if (!= chunk null)
                 (let
                   (compiled (run-compiler chunk))
                   ; should use custom evaluator later on
-                  (evaled (vm.runInContext compiled sandbox))
-                  (inspected (util.inspect evaled {depth:null}))
-                  (stdout.write (str inspected "\n> ")))
+                  (evaled (js-call vm "runInContext" compiled sandbox))
+                  (inspected (js-call util "inspect" evaled (js "{depth:null}")))
+                  (js-call stdout "write" (str inspected "\n> ")))
                 nil)))))
 
       ; we are given a file, compile it
       (== len-args 3)
         (let
-          (file (fs.read-file-sync (at args 2) "utf-8"))
+          (fs (require "fs"))
+          (file (js-call fs "readFileSync" (at args 2) "utf-8"))
           (compiled (run-compiler file))
           (log compiled)))))
 
