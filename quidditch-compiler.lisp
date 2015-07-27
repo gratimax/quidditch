@@ -102,11 +102,6 @@
 (defn lower (s)
   (js-call s "toLowerCase"))
 
-; coerces into an array, welcome to JS
-; mostly used for arguments
-(defn to-array (coll)
-  (js "Array.prototype.slice.call(coll)"))
-
 ; list application of function arguments
 (defn app (f args)
   (js-call f "apply" null args))
@@ -152,8 +147,8 @@
     (var-set! *var* new-val)))
 
 ; builds a list
-(defn list ()
-  (to-array arguments))
+(defn list (& args)
+  args)
 
 ; checks if the list is empty
 (defn empty (l)
@@ -233,16 +228,16 @@
 
 ; composes two functions together
 (defn comp (a b)
-  (fn ()
-    (a (app b (to-array arguments)))))
+  (fn (& args)
+    (a (app b args))))
 
 ; replace except using split
 (defn resplit (s mat val)
   (join (split s mat) val))
 
 ; builds a string
-(defn str ()
-  (join (to-array arguments) ""))
+(defn str (& args)
+  (join args ""))
 
 ; checks if an object is an array
 (defn is-array (obj)
@@ -264,8 +259,8 @@
   (list "trampoline-call" f args))
 
 ; convenience constructor to go to the next function
-(defn callT (f)
-  (callCons f (tail (to-array arguments))))
+(defn callT (f & args)
+  (callCons f args))
 
 ; constructor to return
 (defn valT (v)
@@ -623,10 +618,23 @@
   (if (== (len tree) 2)
     ; of the form (fn <expr> <expr>)
     (let
-      (argsList (map (head tree) (comp sanitize unquote)))
+      (unquote-then-sanitize (comp sanitize unquote))
+      (hd (head tree))
+      (len-hd (len hd))
+      (has-splat (&& (>= len-hd 2) (== (at hd (- len-hd 2)) (quote "&"))))
+      (splat-name (if has-splat
+        (unquote-then-sanitize (at hd (- len-hd 1)))
+        ""))
+      (plain-args (if has-splat
+        (init (init hd))
+        hd))
+      (argsList (map plain-args unquote-then-sanitize))
       (joinedArgs (join argsList ", "))
+      (splat-handling (if has-splat
+        (str "var " splat-name " = Array.prototype.slice.call(arguments," (len argsList) ");" newline?)
+        ""))
       (expr (compile-expr (at tree 1)))
-      (str "function(" joinedArgs "){ return " expr "; }"))
+      (str "function(" joinedArgs "){ " splat-handling "return " expr "; }"))
     (err "fn takes two args"))))
 
 ; the defn macro
