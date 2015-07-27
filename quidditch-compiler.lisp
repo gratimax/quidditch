@@ -621,9 +621,9 @@
       (unquote-then-sanitize (comp sanitize unquote))
       (hd (head tree))
       (len-hd (len hd))
-      (has-splat (&& (>= len-hd 2) (== (at hd (- len-hd 2)) (quote "&"))))
+      (has-splat (&& (>= len-hd 2) (== (last (init hd)) (quote "&"))))
       (splat-name (if has-splat
-        (unquote-then-sanitize (at hd (- len-hd 1)))
+        (unquote-then-sanitize (last hd))
         ""))
       (plain-args (if has-splat
         (init (init hd))
