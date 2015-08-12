@@ -1,9 +1,17 @@
 ; quidditch "native functions"
 ; because the runtime is pretty horrible, these functions need to exist
+(ns quidditch/compiler)
+
+; try/catch, returns an either
+(defn try-call (f)
+  (do
+    (js "var result")
+    (js "try { result = ['right', f()]; } catch (e) { result = ['left', e]; }")
+    (js "result")))
 
 ; calls a js function
-(defn js-call (obj f)
-  (js "obj[f].apply(obj, Array.prototype.slice.call(arguments, 2))"))
+(defn js-call (obj f & args)
+  (js "obj[f].apply(obj, args)"))
 
 ; creates a mutable js object
 (defn new-object ()
@@ -78,6 +86,10 @@
 (defn map (coll f)
   (js-call coll "map" f))
 
+; filters the collection via some function
+(defn filter (coll f)
+  (js-call coll "filter" f))
+
 ; reduces the collection via some aggregate function
 (defn reduce (coll f)
   (js-call coll "reduce" f))
@@ -124,28 +136,6 @@
 ; Quidditch in-language library functions
 ; this is where lisp is somewhat nice :)
 
-; create a mutable variable
-(defn new-var (initial)
-  (do
-    (def *var* (new-object))
-    (obj-set! *var* "value" initial)
-    *var*))
-
-; sets a variable to a value
-(defn var-set! (*var* value)
-  (obj-set! *var* "value" value))
-
-; gets the value of a variable
-(defn var-get (*var*)
-  (obj-get *var* "value"))
-
-; applies and sets a function to the variable
-(defn var-swap! (*var* f)
-  (let
-    (cur-val (var-get *var*))
-    (new-val (f cur-val))
-    (var-set! *var* new-val)))
-
 ; builds a list
 (defn list (& args)
   args)
@@ -173,17 +163,9 @@
     (== (head l) item) true
     else (has (tail l) item)))
 
-; gets the item and the
+; gets the item at the index of the list
 (defn at (l i)
-  (cond
-    (empty l)
-      (err "cannot at from empty list")
-
-    (== i 0)
-      (head l)
-
-    else
-      (at (tail l) (- i 1))))
+  (js "l[i]"))
 
 ; slices a collection from a start
 (defn from (l start)
@@ -280,6 +262,28 @@
       (set! trampoline (app (at trampoline 1) (at trampoline 2))))
     ; return
     (at trampoline 1)))
+
+; either
+
+; builds a left value
+(defn left (val)
+  (list "left" val))
+
+; builds a right value
+(defn right (val)
+  (list "right" val))
+
+; checks if value is left
+(defn is-left (either)
+  (== (head either) "left"))
+
+; checks if value is right
+(defn is-right (either)
+  (== (head either) "right"))
+
+; get the value in an either
+(defn either-get (either)
+  (head (tail either)))
 
 (def parens (list "(" ")"))
 (def whitespace (list " " "\n"))
@@ -516,12 +520,6 @@
         (upper (at replaced (+ index-dash 1)))
         (sanitize (slice replaced (+ index-dash 2)))))))
 
-; whether the expression currently evaluated is at the root
-(def *at-root* (new-var false))
-
-; the current exports
-(def *exports* (new-var nil))
-
 ; whether the generated code should have newline?s
 (def pretty? false)
 
@@ -531,11 +529,14 @@
 ; the list of compiler macros
 (def macros (new-object))
 
+; the list of builtin form expansions
+(def builtins (new-object))
+
 ; unary negation operator
-(obj-set! macros "!" (fn (tree)
+(obj-set! builtins "!" (fn (tree)
   (if (== (len tree) 1)
     ; of the form (! <expr>)
-    (str "!(" (compile-expr (head tree)) ")")
+    (str "!(" (codegen (head tree)) ")")
     (err "! takes one arg"))))
 
 ; list of standard infix ops
@@ -543,78 +544,73 @@
 
 ; make a macro for all infix operators
 (foreach infix (fn (infix)
-  (obj-set! macros infix (fn (tree)
+  (obj-set! builtins infix (fn (tree)
     (if (== (len tree) 2)
       ; of the form (<op> <expr> <expr>)
-      (str "(" (compile-expr (head tree)) infix (compile-expr (at tree 1)) ")")
+      (str "(" (codegen (head tree)) infix (codegen (at tree 1)) ")")
       (err (str infix " takes two args")))))))
 
 ; == gets special treatment since it desugars to === always
-(obj-set! macros "==" (fn (tree)
+(obj-set! builtins "==" (fn (tree)
   (if (== (len tree) 2)
       ; of the form (<op> <expr> <expr>)
-      (str "(" (compile-expr (head tree)) "===" (compile-expr (at tree 1)) ")")
+      (str "(" (codegen (head tree)) "===" (codegen (at tree 1)) ")")
       (err "== takes two args"))))
 
 ; same with !=
-(obj-set! macros "!=" (fn (tree)
+(obj-set! builtins "!=" (fn (tree)
   (if (== (len tree) 2)
       ; of the form (<op> <expr> <expr>)
-      (str "(" (compile-expr (head tree)) "!==" (compile-expr (at tree 1)) ")")
+      (str "(" (codegen (head tree)) "!==" (codegen (at tree 1)) ")")
       (err "!= takes two args"))))
 
 ; and mod
-(obj-set! macros "mod" (fn (tree)
+(obj-set! builtins "mod" (fn (tree)
   (if (== (len tree) 2)
       ; of the form (<op> <expr> <expr>)
-      (str "(" (compile-expr (head tree)) "%" (compile-expr (at tree 1)) ")")
+      (str "(" (codegen (head tree)) "%" (codegen (at tree 1)) ")")
       (err "mod takes two args"))))
 
 ; the def macro
-(obj-set! macros "def" (fn (tree)
+(obj-set! builtins "def" (fn (tree)
   (if (== (len tree) 2)
     ; of the form (def <name> <expr>)
-    (do
-      (def name (sanitize (unquote (head tree))))
-      (if (var-get *at-root*)
-        (var-swap! *exports* (fn (exports)
-          (push exports name)))
-        nil)
+    (let
+      (name (sanitize (unquote (head tree))))
       (str
         "var "
         name
         " = "
-        (compile-expr (at tree 1))))
+        (codegen (at tree 1))))
     (err "def takes two args"))))
 
 ; the if macro
-(obj-set! macros "if" (fn (tree)
+(obj-set! builtins "if" (fn (tree)
   (if (== (len tree) 3)
     ; of the form (if <expr> <expr> <expr>)
     (str
-      "(" (compile-expr (head tree))
-      " ? " (compile-expr (at tree 1))
-      " : " (compile-expr (at tree 2))
+      "(" (codegen (head tree))
+      " ? " (codegen (at tree 1))
+      " : " (codegen (at tree 2))
       ")")
     (err "if takes three args"))))
 
 ; the do macro
-(obj-set! macros "do" (fn (tree)
+(obj-set! builtins "do" (fn (tree)
   (if (== (len tree) 0)
     ; of the form (do <expr>+)
     (err "do takes at least one arg")
     (let
-      (_ (var-set! *at-root* false))
-      (mapper (comp (fn (s) (str s ";" newline?)) compile-expr))
+      (mapper (comp (fn (s) (str s ";" newline?)) codegen))
       (mapped (map (init tree) mapper))
       (joined (join mapped ""))
       (str "(function(){" newline?
         joined
-        "return " (compile-expr (last tree))
+        "return " (codegen (last tree))
         ";})()")))))
 
 ; the fn macro
-(obj-set! macros "fn" (fn (tree)
+(obj-set! builtins "fn" (fn (tree)
   (if (== (len tree) 2)
     ; of the form (fn <expr> <expr>)
     (let
@@ -633,9 +629,40 @@
       (splat-handling (if has-splat
         (str "var " splat-name " = Array.prototype.slice.call(arguments," (len argsList) ");" newline?)
         ""))
-      (expr (compile-expr (at tree 1)))
+      (expr (codegen (at tree 1)))
       (str "function(" joinedArgs "){ " splat-handling "return " expr "; }"))
     (err "fn takes two args"))))
+
+; while macro
+(obj-set! builtins "while" (fn (tree)
+  (if (>= (len tree) 2)
+    ; of the form (while <expr> <ex1> <ex2> <ex3>)
+    (let
+      (mapper (comp (fn (s) (str s ";" newline?)) codegen))
+      (mapped (map (tail tree) mapper))
+      (joined (join mapped ""))
+      (str
+        "while(" (codegen (head tree)) "){" newline?
+        joined
+        "}"))
+    (err "while takes at least two args"))))
+
+; set! macro
+(obj-set! builtins "set!" (fn (tree)
+  (if (== (len tree) 2)
+    ; of the form (set! <name> <val>)
+    (let
+      (name (sanitize (unquote (head tree))))
+      (body (codegen (at tree 1)))
+      (str name " = " body))
+    (err "set takes only two args"))))
+
+; js eval macro, passes string straight through
+(obj-set! builtins "js" (fn (tree)
+  (if (== (len tree) 1)
+    ; of the form (js "<js>")
+    (init (tail (head tree)))
+    (err "js takes only one arg"))))
 
 ; the defn macro
 (obj-set! macros "defn" (fn (tree)
@@ -646,7 +673,7 @@
       (args (at tree 1))
       (body (at tree 2))
       (anon (list (quote "fn") args body))
-      (compile-expr (list (quote "def") name anon)))
+      (list (quote "def") name anon))
     (err "defn takes three args"))))
 
 ; the let macro
@@ -658,7 +685,7 @@
       (body (map (init tree) (fn (tree)
         (cons (quote "def") tree))))
       (form (push (cons (quote "do") body) expr))
-      (compile-expr form body)))))
+      form))))
 
 ; the cond macro
 (obj-set! macros "cond" (fn (tree)
@@ -676,62 +703,10 @@
         (grouped (group2 rest))
         (form (fold-r grouped (fn (acc con)
           (list (quote "if") (head con) (at con 1) acc)) lt))
-        (compile-expr form)))))
-
-; while macro
-(obj-set! macros "while" (fn (tree)
-  (if (>= (len tree) 2)
-    ; of the form (while <expr> <ex1> <ex2> <ex3>)
-    (let
-      (mapper (comp (fn (s) (str s ";" newline?)) compile-expr))
-      (mapped (map (tail tree) mapper))
-      (joined (join mapped ""))
-      (str
-        "while(" (compile-expr (head tree)) "){" newline?
-        joined
-        "}"))
-    (err "while takes at least two args"))))
-
-; set! macro
-(obj-set! macros "set!" (fn (tree)
-  (if (== (len tree) 2)
-    ; of the form (set! <name> <val>)
-    (let
-      (name (sanitize (unquote (head tree))))
-      (body (compile-expr (at tree 1)))
-      (str name " = " body))
-    (err "set takes only two args"))))
-
-; js eval macro, passes string straight through
-(obj-set! macros "js" (fn (tree)
-  (if (== (len tree) 1)
-    ; of the form (js "<js>")
-    (init (tail (head tree)))
-    (err "js takes only one arg"))))
-
-; takes a parse tree and compiles it into JS
-(defn compile (tree)
-  (if (empty tree)
-    (let
-      ; assemble exports
-      (exp (var-get *exports*))
-      (exp-list (join exp " "))
-      ;(setters (map exp (fn (e) (str "export('" e "', " e ");" newline?))))
-      (setters nil)
-      (setters-joined (join setters ""))
-      (str
-        setters-joined
-        "// QUIDDITCH-EXPORTS " exp-list newline?))
-    (do
-      (var-set! *at-root* true)
-      (str
-        ; compiles the next expression
-        (compile-expr (head tree))
-        ";" newline?
-        (compile (tail tree))))))
+        form))))
 
 ; compiles a parse tree
-(defn compile-expr (expr)
+(defn codegen (expr)
   (cond
     ; we have either an s-expression or a macro to expand
     (is-array expr)
@@ -739,23 +714,24 @@
         (hd (head expr))
         (tl (tail expr))
         (if (is-string hd)
-          ; our head is a string, meaning it's either a macro
+          ; our head is a string, meaning it's either a builtin
           ; or easily compilable s-expression
           (let
             (unquoted (unquote hd))
-            (if (has-key macros unquoted)
-              ; we have found a macro to expand
-              ((obj-get macros unquoted) tl)
-              ; no macro, just plain s-expression
+            (if (has-key builtins unquoted)
+              ; we found a builtin that matches, use it
+              ((obj-get builtins unquoted) tl)
+              ; otherwise it's a normal function call
               (let
-                (mapped (map tl compile-expr))
+                (mapped (map tl codegen))
                 (joined (join mapped ", "))
                 (str (sanitize unquoted) "(" joined ")"))))
+
           ; otherwise, we need to go the long way and compile the head
           ; for the s-expression
           (let
-            (callee (compile-expr hd))
-            (mapped (map tl compile-expr))
+            (callee (codegen hd))
+            (mapped (map tl codegen))
             (joined (join mapped ", "))
             (str "(" callee ")(" joined ")"))))
 
@@ -766,23 +742,90 @@
         "[]"
         ; perhaps some more sophisticated deref in the future
         ; for now, a rather simple unquote
-        (unquote (sanitize expr)))
+        (sanitize (unquote expr)))
 
     ; no other special forms, so we just return the expr
     else expr))
 
+; expands all macros in an expression
+(defn macro-expand (expr)
+  (cond
+    ; we have an s-expression, possibility of a macro
+    (is-array expr)
+      (let
+        (hd (head expr))
+        (tl (tail expr))
+        (if (is-string hd)
+          ; the head is a string, there's still possibility of a macro
+          (let
+            (unquoted (unquote hd))
+            (if (has-key macros unquoted)
+              ; we found a macro for it, apply it
+              (map ((obj-get macros unquoted) tl) macro-expand)
+              ; otherwise keep expanding
+              ; we don't need to expand the head because we know it's a string
+              (cons hd (map tl macro-expand))))
+          ; otherwise, keep expanding
+          (map expr macro-expand)))
+
+    ; no s-expression, just an identifier
+    else
+      ; So we pass it straight through
+      expr))
+
+; predicate for if an expression is a def-expression
+(defn is-def (expr)
+  (== (head expr) (quote "def")))
+
+; gets the def in an expression with a def
+(defn get-def (expr)
+  (sanitize (unquote (at expr 1))))
+
+; gets all the definitions from a set of expressions
+(defn get-defs (exprs)
+  (let
+    (only-defs (filter exprs is-def))
+    (map only-defs get-def)))
+
+(defn has-ns (exprs)
+  (== (head (head exprs)) (quote "ns")))
+
+(defn get-dependencies (exprs)
+  (if (has-ns exprs)
+    (map (tail (tail (head exprs))) (fn (bindings) (join (map bindings (comp sanitize unquote)) " ")))
+    nil))
+
+; ends an expression with the expression and a possible newline
+(defn end-expr (expr)
+  (str expr ";" newline?))
+
 ; runs the compiler on some code
-(defn run-compiler (source)
+; returns source + defs
+(defn compile (source compile-ns)
   (let
     (tokens (tokenize source))
     (parsed (parse tokens))
-    (compiled (compile parsed))
-    compiled))
+    ;(log parsed)
+    ;(compiled (compile parsed))
+    (expanded (map parsed macro-expand))
+    (defs (get-defs expanded))
+    (dependencies (get-dependencies expanded))
+    (generated (app str (map (if compile-ns (tail expanded) expanded) (comp end-expr codegen))))
+    (str generated "\n// QUIDDITCH-EXPORTS " (join defs " ") "\n// QUIDDITCH-DEPENDENCIES " (join dependencies " "))))
+
+(def fs nil)
+
+; compiles a file
+(defn compile-file (file)
+  (let
+    (source (js-call fs "readFileSync" file "utf-8"))
+    (compile source true)))
 
 ; the main function. Takes a list of string args
 (defn main (args)
   (let
     (util (require "util"))
+    (_ (set! fs (require "fs")))
 
     (len-args (len args))
 
@@ -795,6 +838,8 @@
           (def stdout (js-get process "stdout"))
           (def vm (require "vm"))
           (def sandbox (js-call vm "createContext"))
+          (def stdlib-compiled (compile-file "stdlib.lisp"))
+          (js-call vm "runInContext" stdlib-compiled sandbox)
           (log "Quidditch repl (ctrl-c to exit)")
           (js-call stdout "write" "> ")
           (js-call stdin "setEncoding" "utf8")
@@ -803,20 +848,23 @@
               (chunk (js-call stdin "read"))
               (if (!= chunk null)
                 (let
-                  (compiled (run-compiler chunk))
+                  (compiled (compile chunk false))
                   ; should use custom evaluator later on
-                  (evaled (js-call vm "runInContext" compiled sandbox))
-                  (inspected (js-call util "inspect" evaled (js "{depth:null}")))
-                  (js-call stdout "write" (str inspected "\n> ")))
+                  (evaled (try-call (fn () (js-call vm "runInContext" compiled sandbox))))
+                  (if (is-right evaled)
+                    (let
+                      (inspected (js-call util "inspect" (either-get evaled) (js "{depth:null}")))
+                      (js-call stdout "write" (str inspected "\n> ")))
+                    (js-call stdout "write" (str (either-get evaled) "\n> "))))
                 nil)))))
 
       ; we are given a file, compile it
       (== len-args 3)
         (let
-          (fs (require "fs"))
-          (file (js-call fs "readFileSync" (at args 2) "utf-8"))
-          (compiled (run-compiler file))
-          (log compiled)))))
+          (file (at args 2))
+          (compiled (compile-file file))
+          (log compiled)
+          ))))
 
 ; run the main function with the passed-in command line args
 (main argv)

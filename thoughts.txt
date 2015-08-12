@@ -53,3 +53,4 @@
 - took about 10 minutes debugging and 5 minutes to implement in compiler, works flawlessly and simple implementation!
 - warning: often when you make mistakes it is somewhat hard to recover
 - whoops, did not handle newlines!!! when I set editor to always have newlines this was a problem
+- added the "standard library" to the repl, just put it in another file
